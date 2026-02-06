@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VidAutoDown</title>
+    <style>
+        :root {
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            --text-color: #ffffff;
+            --accent-color: #4facfe;
+            --danger-color: #ff4d4f;
+            --success-color: #2bb673;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(45deg, #0f2027, #203a43, #2c5364);
+            color: var(--text-color);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Glassmorphism Classes */
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            box-shadow: var(--glass-shadow);
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            padding: 20px;
+            gap: 20px;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 350px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow: hidden;
+        }
+
+        /* Inputs */
+        textarea {
+            width: 100%;
+            height: 100px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: #fff;
+            padding: 10px;
+            resize: none;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        button.primary {
+            background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%);
+            border: none;
+            color: #000;
+            font-weight: bold;
+        }
+        
+        button.danger {
+            background: rgba(255, 77, 79, 0.2);
+            border-color: rgba(255, 77, 79, 0.5);
+        }
+        
+        button.danger:hover {
+             background: rgba(255, 77, 79, 0.4);
+        }
+
+        /* Console */
+        .console {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 0.9em;
+            color: #ccc;
+        }
+
+        /* Task List */
+        .task-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding-right: 5px;
+        }
+
+        .task-item {
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            transition: transform 0.2s;
+        }
+        
+        .task-item:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .task-title {
+            font-weight: 600;
+            font-size: 1em;
+            word-break: break-all;
+            margin-right: 10px;
+        }
+
+        .badge {
+            font-size: 0.75em;
+            padding: 4px 8px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .badge.queued { background: #1f6aa5; }
+        .badge.downloading { background: #22a15b; }
+        .badge.completed { background: #2bb673; }
+        .badge.failed { background: #ff4d4f; }
+        .badge.paused { background: #ffaa00; }
+
+        .task-info {
+            font-size: 0.85em;
+            color: rgba(255, 255, 255, 0.7);
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe, #00f2fe);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 5px;
+        }
+
+        .task-actions button {
+            padding: 4px 10px;
+            font-size: 0.8em;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.1);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .header {
+             padding: 15px 20px 0 20px;
+             display: flex;
+             align-items: center;
+             justify-content: space-between;
+        }
+        
+        h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            background: linear-gradient(to right, #fff, #a1c4fd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        input[type="checkbox"] {
+            accent-color: var(--accent-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>VidAutoDown</h1>
+    </div>
+
+    <div class="container">
+        <!-- Left Sidebar -->
+        <div class="sidebar glass-panel" style="padding: 15px;">
+            <h3>Add Links</h3>
+            <textarea id="linkInput" placeholder="Paste links here (one per line)..." oninput="handleInput()"></textarea>
+            
+            <hr style="border: 0; border-top: 1px solid var(--glass-border); width: 100%; margin: 15px 0;">
+
+            <h3>Settings</h3>
+            <div class="controls">
+                <button onclick="browseDestination()" style="flex: 1;">📁 Destination</button>
+                <button onclick="openFolder()" title="Open Folder">🗂</button>
+            </div>
+            <div style="font-size: 0.8em; color: rgba(255,255,255,0.6); margin-top: 5px;" id="destLabel">
+                Not selected
+            </div>
+
+            <div style="margin-top: 15px; display: flex; align-items: center; gap: 10px;">
+                <label for="maxConcurrent">Max Downloads:</label>
+                <select id="maxConcurrent" onchange="setMaxConcurrent(this.value)" style="background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--glass-border); border-radius: 4px; padding: 2px;">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                </select>
+            </div>
+
+            <div style="margin-top: 10px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="autoDelete" onchange="toggleAutoDelete(this.checked)">
+                    Auto-delete from list when finished
+                </label>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid var(--glass-border); width: 100%; margin: 15px 0;">
+
+            <h3>Log</h3>
+            <div class="console" id="consoleOutput"></div>
+            
+             <div class="controls" style="margin-top: 10px;">
+                 <button class="danger" onclick="clearFinished()" style="flex: 1;">Clear Finished</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content glass-panel" style="padding: 0;">
+            <div style="padding: 15px; border-bottom: 1px solid var(--glass-border);">
+                <h2 style="margin: 0;">Download Queue</h2>
+            </div>
+            <div class="task-list" id="taskList" style="padding: 10px;">
+                <!-- Tasks will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        const tasks = {};
+        let typingTimer;
+
+        function handleInput() {
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(addLinks, 500);
+        }
+
+        // API Bridge wrappers
+        async function addLinks() {
+            const input = document.getElementById('linkInput');
+            const text = input.value;
+            if (!text.trim()) return;
+            
+            await pywebview.api.add_links(text);
+            input.value = '';
+        }
+
+        async function browseDestination() {
+            const path = await pywebview.api.browse_destination();
+            if (path) {
+                document.getElementById('destLabel').textContent = path;
+            }
+        }
+
+        function openFolder() {
+            pywebview.api.open_folder();
+        }
+
+        function setMaxConcurrent(val) {
+            pywebview.api.set_max_concurrent(parseInt(val));
+        }
+
+        function toggleAutoDelete(checked) {
+            pywebview.api.set_auto_delete(checked);
+        }
+
+        function clearFinished() {
+            pywebview.api.clear_finished();
+        }
+
+        // Task Actions
+        function pauseTask(url) { pywebview.api.pause_task(url); }
+        function resumeTask(url) { pywebview.api.resume_task(url); }
+        function cancelTask(url) { pywebview.api.cancel_task(url); }
+        function removeTask(url) { pywebview.api.remove_task(url); }
+        function retryTask(url) { pywebview.api.retry_task(url); }
+        function openTaskFile(url) { pywebview.api.open_task_file(url); }
+
+        // UI Updates called from Python
+        function logMessage(msg) {
+            const consoleEl = document.getElementById('consoleOutput');
+            const line = document.createElement('div');
+            line.textContent = `> ${msg}`;
+            consoleEl.appendChild(line);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        function updateSettings(settings) {
+            if (settings.last_folder) {
+                document.getElementById('destLabel').textContent = settings.last_folder;
+            }
+            if (settings.max_concurrent) {
+                document.getElementById('maxConcurrent').value = settings.max_concurrent;
+            }
+            if (settings.auto_delete !== undefined) {
+                document.getElementById('autoDelete').checked = settings.auto_delete;
+            }
+        }
+
+        function refreshTasks(taskList) {
+            const listEl = document.getElementById('taskList');
+            const currentUrls = new Set(taskList.map(t => t.url));
+
+            // Remove old
+            for (const url of Object.keys(tasks)) {
+                if (!currentUrls.has(url)) {
+                    const safeId = encodeURIComponent(url).replace(/%/g, '_').replace(/\./g, '_');
+                    const el = document.getElementById(`task-${safeId}`); // safe ID
+                    if (el) el.remove();
+                    delete tasks[url];
+                }
+            }
+
+            // Add/Update
+            taskList.forEach(task => {
+                const safeId = encodeURIComponent(task.url).replace(/%/g, '_').replace(/\./g, '_');
+                const taskId = `task-${safeId}`;
+                let el = document.getElementById(taskId);
+
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = taskId;
+                    el.className = 'task-item glass-panel';
+                    el.style.background = 'rgba(255,255,255,0.05)';
+                    el.style.border = 'none'; // nested panel style
+                    listEl.appendChild(el);
+                    tasks[task.url] = true;
+                }
+
+                // Render content
+                const speed = task.speed || '';
+                const eta = task.eta ? `ETA: ${task.eta}` : '';
+                const size = task.size || '';
+                const res = (task.width && task.height) ? `${task.width}x${task.height}` : '';
+                const infoStr = [size, res, speed, eta, task.strategy ? `[${task.strategy}]` : ''].filter(Boolean).join(' | ');
+
+                // Buttons logic
+                let buttons = '';
+                if (task.status === 'downloading') {
+                    buttons += `<button onclick="pauseTask('${task.url}')">⏸ Pause</button>`;
+                } else if (task.status === 'paused') {
+                    buttons += `<button onclick="resumeTask('${task.url}')">▶️ Resume</button>`;
+                }
+
+                if (['downloading', 'paused', 'queued', 'fetching-info', 'info'].includes(task.status)) {
+                    buttons += `<button class="danger" onclick="cancelTask('${task.url}')">⏹ Cancel</button>`;
+                }
+
+                if (task.status === 'failed') {
+                    buttons += `<button onclick="retryTask('${task.url}')">🔁 Retry</button>`;
+                }
+                
+                if (['cancelled', 'completed', 'failed'].includes(task.status)) {
+                    buttons += `<button class="danger" onclick="removeTask('${task.url}')">🗑 Remove</button>`;
+                }
+                
+                if (task.status === 'completed') {
+                     buttons += `<button onclick="openTaskFile('${task.url}')">📂 Open</button>`;
+                }
+
+                el.innerHTML = `
+                    <div class="task-header">
+                        <div class="task-title" title="${task.url}">${task.filename || task.title || task.url}</div>
+                        <span class="badge ${task.status}">${task.status}</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${task.progress * 100}%"></div>
+                    </div>
+                    <div class="task-info">${infoStr}</div>
+                    <div class="task-actions">
+                        ${buttons}
+                    </div>
+                `;
+            });
+            
+            // Show empty state if needed
+            if (taskList.length === 0) {
+                 if(!document.getElementById('empty-msg')) {
+                     listEl.innerHTML = '<div id="empty-msg" style="text-align:center; padding: 20px; color: rgba(255,255,255,0.5);">Queue is empty</div>';
+                 }
+            } else {
+                 const empty = document.getElementById('empty-msg');
+                 if(empty) empty.remove();
+            }
+        }
+    </script>
+</body>
+</html>
