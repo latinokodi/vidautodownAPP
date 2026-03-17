@@ -473,6 +473,14 @@
                 </div>
 
                 <div id="crawlerErrorArea" class="crawler-error" style="display: none;"></div>
+
+                <div id="crawlerResults" style="display: none; margin-top: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3 style="margin: 0;" id="crawlerResultsTitle">Found URLs</h3>
+                        <button onclick="addCrawledUrlsToQueue()" class="primary">Add All to Queue</button>
+                    </div>
+                    <div id="crawlerUrlList" class="console" style="max-height: 300px; overflow-y: auto;"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -483,6 +491,7 @@
         let typingTimer;
         let crawlerLoading = false;
         let crawlerCount = 0;
+        let crawledUrls = [];
 
         // Tab switching
         function switchTab(tab) {
@@ -591,20 +600,56 @@
         function handleCrawlMessage(payload) {
             if (payload.type === 'crawl_start') {
                 crawlerLoading = true;
+                crawledUrls = [];
+                document.getElementById('crawlerResults').style.display = 'none';
                 updateCrawlerUI();
             } else if (payload.type === 'crawl_progress') {
                 crawlerCount = payload.payload.count;
                 document.getElementById('crawlerCount').textContent = `${crawlerCount} found`;
                 document.getElementById('crawlerProgressBar').style.width = `${Math.min(crawlerCount * 5, 90)}%`;
             } else if (payload.type === 'crawl_complete') {
-                logMessage(`Crawl complete: ${payload.payload.urls?.length || 0} URLs found`);
+                crawledUrls = payload.payload.urls || [];
+                logMessage(`Crawl complete: ${crawledUrls.length} URLs found`);
                 resetCrawler();
+                showCrawlerResults();
             } else if (payload.type === 'crawl_error') {
                 showCrawlerError(payload.payload.error);
                 resetCrawler();
             } else if (payload.type === 'crawl_cancelled') {
                 resetCrawler();
             }
+        }
+
+        function showCrawlerResults() {
+            const resultsDiv = document.getElementById('crawlerResults');
+            const listDiv = document.getElementById('crawlerUrlList');
+            const titleEl = document.getElementById('crawlerResultsTitle');
+
+            if (crawledUrls.length === 0) {
+                resultsDiv.style.display = 'none';
+                return;
+            }
+
+            titleEl.textContent = `Found ${crawledUrls.length} URLs`;
+            listDiv.innerHTML = crawledUrls.map((item, i) =>
+                `<div style="padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <span style="color: #4facfe;">${i + 1}.</span> ${item.title || item.url}
+                </div>`
+            ).join('');
+
+            resultsDiv.style.display = 'block';
+        }
+
+        async function addCrawledUrlsToQueue() {
+            if (crawledUrls.length === 0) return;
+
+            const urlText = crawledUrls.map(u => u.url).join('\n');
+            await pywebview.api.add_links(urlText);
+            logMessage(`Added ${crawledUrls.length} URLs to queue`);
+
+            // Clear results after adding
+            crawledUrls = [];
+            document.getElementById('crawlerResults').style.display = 'none';
         }
 
         // API Bridge wrappers
