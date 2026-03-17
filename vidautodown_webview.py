@@ -460,6 +460,7 @@ class DownloadController:
     def __init__(self, ui_queue: "queue.Queue[tuple]"):
         self.ui_queue = ui_queue
         self.sem = threading.Semaphore(DEFAULT_MAX_CONCURRENT)
+        self.info_sem = threading.Semaphore(DEFAULT_MAX_CONCURRENT)  # Limit concurrent info fetches
         self.tasks_lock = threading.Lock()
         self.tasks: Dict[str, Task] = {}
         self.stop_event = threading.Event()
@@ -470,7 +471,7 @@ class DownloadController:
         self._last_progress_post_ts: Dict[str, float] = {}
         self._last_progress_pct: Dict[str, float] = {}
         self.auto_delete_finished = False
-        
+
         self.aria2c_path = which_aria2c()
 
         self.manager_thread = threading.Thread(target=self._manager_loop, daemon=True)
@@ -486,6 +487,7 @@ class DownloadController:
     def set_max_concurrent(self, n: int) -> None:
         self.max_concurrent = max(1, min(6, n))
         self.sem = threading.Semaphore(self.max_concurrent)
+        self.info_sem = threading.Semaphore(self.max_concurrent)
         self.post(("log", f"Max concurrent downloads: {self.max_concurrent}"))
 
     def add_urls(self, urls: List[str]) -> None:
@@ -599,8 +601,9 @@ class DownloadController:
                 with self.tasks_lock:
                     info_tasks = [t for t in self.tasks.values() if t.status == "info"]
                     for t in info_tasks:
-                        t.status = "fetching-info"
-                        threading.Thread(target=self._fetch_info_worker, args=(t.url,), daemon=True).start()
+                        if self.info_sem.acquire(blocking=False):
+                            t.status = "fetching-info"
+                            threading.Thread(target=self._fetch_info_worker, args=(t.url,), daemon=True).start()
 
                     download_tasks = [t for t in self.tasks.values() if t.status == "queued"]
                     for t in download_tasks:
@@ -620,6 +623,7 @@ class DownloadController:
                 task = self.tasks.get(url)
                 if task: task.status = "failed"
             self.post(("refresh", None))
+            self.info_sem.release()
             return
 
         logging.info(f"DOWNLOAD: Fetching info for {url}")
@@ -659,6 +663,7 @@ class DownloadController:
                     task.status = "failed"
                     task.title = f"Error: {str(e)[:50]}"
         finally:
+            self.info_sem.release()
             self.post(("refresh", None))
 
     def _maybe_post_progress(self, url: str, pct_value_0_100: float) -> None:
