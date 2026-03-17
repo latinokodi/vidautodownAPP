@@ -37,10 +37,16 @@ if errorlevel 1 (
 
 REM Install/Update dependencies
 echo ============================================
-echo    Checking dependencies...
+echo    Updating dependencies...
 echo ============================================
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+pip install --upgrade -r requirements.txt
+
+REM Ensure yt-dlp is latest (critical for video downloads)
+echo ============================================
+echo    Updating yt-dlp to latest...
+echo ============================================
+pip install --upgrade yt-dlp
 
 REM Check for aria2c
 if not exist "venv\Scripts\aria2c.exe" (
@@ -52,6 +58,19 @@ if not exist "venv\Scripts\aria2c.exe" (
         echo    aria2c installed successfully.
     ) else (
         echo    WARNING: Failed to install aria2c.
+    )
+)
+
+REM Check for PhantomJS (required for some sites like Pornhub model pages)
+if not exist "venv\Scripts\phantomjs.exe" (
+    echo ============================================
+    echo    Downloading PhantomJS...
+    echo ============================================
+    powershell -Command "$url = 'https://bitbucket.org/ariya/phantomjs/downloads/phantomjs-2.1.1-windows.zip'; $out = 'phantomjs.zip'; Invoke-WebRequest -Uri $url -OutFile $out; Expand-Archive -Path $out -DestinationPath .; Move-Item -Path 'phantomjs-2.1.1-windows\bin\phantomjs.exe' -Destination 'venv\Scripts\phantomjs.exe'; Remove-Item -Path $out -Force; Remove-Item -Path 'phantomjs-2.1.1-windows' -Recurse -Force"
+    if exist "venv\Scripts\phantomjs.exe" (
+        echo    PhantomJS installed successfully.
+    ) else (
+        echo    WARNING: Failed to install PhantomJS. Some sites may not work.
     )
 )
 
