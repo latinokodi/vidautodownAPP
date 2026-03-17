@@ -390,6 +390,9 @@ class CrawlerService:
                             data = json.loads(line)
                             url = data.get("url") or data.get("webpage_url")
                             if url:
+                                # Convert http to https for video sites
+                                if url.startswith("http://"):
+                                    url = "https://" + url[7:]
                                 urls_found.append({
                                     "url": url,
                                     "title": data.get("title", "Unknown"),
