@@ -436,6 +436,9 @@
                  <div class="controls" style="margin-top: 10px;">
                      <button class="danger" onclick="clearFinished()" style="flex: 1;">Clear Finished</button>
                 </div>
+                 <div class="controls" style="margin-top: 5px;">
+                     <button onclick="clearTempFiles()" style="flex: 1;">🗑 Clear Temp Files</button>
+                </div>
             </div>
 
             <!-- Main Content -->
@@ -683,6 +686,15 @@
 
         function clearFinished() {
             pywebview.api.clear_finished();
+        }
+
+        async function clearTempFiles() {
+            const count = await pywebview.api.clear_temp_files();
+            if (count > 0) {
+                logMessage(`Cleared ${count} temp file(s)`);
+            } else {
+                logMessage('No temp files to clear');
+            }
         }
 
         // Task Actions

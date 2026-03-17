@@ -27,7 +27,7 @@ DB_FILE = "vidautodown.db"
 MANAGER_TICK_MS = 300
 EVENT_POLL_MS = 100  # slightly slower than tk
 AUTO_SAVE_SEC = 10
-MAX_RETRIES = 2
+MAX_RETRIES = 5
 DEFAULT_MAX_CONCURRENT = 2
 DEFAULT_OUTPUT_TPL = "%(title).100s [%(width)sx%(height)s] [%(id)s].%(ext)s"
 
@@ -701,32 +701,80 @@ class DownloadController:
             with self.tasks_lock:
                 if task: task.dest = folder
 
-            base_cmd = [
-                yt_dlp_path, "--newline", "--progress", "-S", "res,ext:mp4:m4a", "--recode", "mp4",
-                "-P", f"home:{folder}", "-P", f"temp:{partial_folder}",
-                "-o", self.output_tpl, "--no-warnings", "--no-overwrites", "--continue",
-                "--retries", "10", "--fragment-retries", "10"
-            ]
-            cmd = list(base_cmd)
-            strategy_name = ""
+            # Clear temp files before starting/retrying
+            try:
+                for f in os.listdir(partial_folder):
+                    fpath = os.path.join(partial_folder, f)
+                    if os.path.isfile(fpath):
+                        os.remove(fpath)
+            except Exception:
+                pass
 
+            # Different strategies for retries
+            # 0: Fast with concurrent fragments
+            # 1: aria2c if available
+            # 2: No recode, just download best format
+            # 3: Worst quality fallback
+            # 4: Direct best format without merge
             if current_retry == 0:
-                strategy_name = "Strategy A"
-                cmd.extend(["--concurrent-fragments", "4"])
-                with self.tasks_lock:
-                    if task: task.strategy = "Strategy A"
+                strategy_name = "Strategy A (fast)"
+                cmd = [
+                    yt_dlp_path, "--newline", "--progress", "-S", "res,ext:mp4:m4a", "--recode", "mp4",
+                    "-P", f"home:{folder}", "-P", f"temp:{partial_folder}",
+                    "-o", self.output_tpl, "--no-warnings", "--no-overwrites", "--continue",
+                    "--retries", "3", "--fragment-retries", "5",
+                    "--concurrent-fragments", "4"
+                ]
             elif current_retry == 1:
                 if self.aria2c_path:
-                    strategy_name = "Strategy B"
-                    cmd.extend(["--downloader", "aria2c", "--downloader-args", "aria2c:-x16 -s16 -k1M"])
-                    with self.tasks_lock:
-                        if task: task.strategy = "Strategy B"
+                    strategy_name = "Strategy B (aria2c)"
+                    cmd = [
+                        yt_dlp_path, "--newline", "--progress", "-S", "res,ext:mp4:m4a", "--recode", "mp4",
+                        "-P", f"home:{folder}", "-P", f"temp:{partial_folder}",
+                        "-o", self.output_tpl, "--no-warnings", "--no-overwrites", "--continue",
+                        "--retries", "3", "--fragment-retries", "5",
+                        "--downloader", "aria2c", "--downloader-args", "aria2c:-x16 -s16 -k1M"
+                    ]
                 else:
-                    raise FileNotFoundError("aria2c not found")
+                    strategy_name = "Strategy B (no aria2c, fallback)"
+                    cmd = [
+                        yt_dlp_path, "--newline", "--progress",
+                        "-P", f"home:{folder}", "-P", f"temp:{partial_folder}",
+                        "-o", self.output_tpl, "--no-warnings", "--no-overwrites", "--continue",
+                        "--retries", "5", "--fragment-retries", "10",
+                        "-f", "best[ext=mp4]/best"
+                    ]
+            elif current_retry == 2:
+                strategy_name = "Strategy C (no recode)"
+                cmd = [
+                    yt_dlp_path, "--newline", "--progress",
+                    "-P", f"home:{folder}", "-P", f"temp:{partial_folder}",
+                    "-o", self.output_tpl, "--no-warnings", "--no-overwrites", "--continue",
+                    "--retries", "5", "--fragment-retries", "10",
+                    "-f", "best[ext=mp4]/best"
+                ]
+            elif current_retry == 3:
+                strategy_name = "Strategy D (worst fallback)"
+                cmd = [
+                    yt_dlp_path, "--newline", "--progress",
+                    "-P", f"home:{folder}", "-P", f"temp:{partial_folder}",
+                    "-o", self.output_tpl, "--no-warnings", "--no-overwrites", "--continue",
+                    "--retries", "5", "--fragment-retries", "10",
+                    "-f", "worst"
+                ]
             else:
-                strategy_name = "Strategy C"
-                with self.tasks_lock:
-                    if task: task.strategy = "Strategy C"
+                strategy_name = "Strategy E (direct best)"
+                cmd = [
+                    yt_dlp_path, "--newline", "--progress",
+                    "-P", f"home:{folder}", "-P", f"temp:{partial_folder}",
+                    "-o", self.output_tpl, "--no-warnings",
+                    "--retries", "10", "--fragment-retries", "10",
+                    "-f", "bestvideo+bestaudio/best",
+                    "--merge-output-format", "mp4"
+                ]
+
+            with self.tasks_lock:
+                if task: task.strategy = strategy_name
 
             cmd.append(url)
 
@@ -795,11 +843,12 @@ class DownloadController:
                 with self.tasks_lock:
                     if task.retries < MAX_RETRIES:
                         task.retries += 1
+                        task.progress = 0.0
                         task.status = "queued"
-                        threading.Thread(target=lambda: (time.sleep(1)), daemon=True).start()
+                        self.post(("log", f"Retry {task.retries}/{MAX_RETRIES}: {task.title or url}"))
                     else:
                         task.status = "failed"
-                        self.post(("log", f"Failed: {task.title or url}"))
+                        self.post(("log", f"Failed after {MAX_RETRIES} retries: {task.title or url}"))
         except Exception as e:
             logging.error(f"DOWNLOAD: Exception for {url}: {e}", exc_info=True)
             with self.tasks_lock:
@@ -807,10 +856,12 @@ class DownloadController:
                 if task:
                     if task.retries < MAX_RETRIES:
                         task.retries += 1
+                        task.progress = 0.0
                         task.status = "queued"
-                        threading.Thread(target=lambda: (time.sleep(1)), daemon=True).start()
+                        self.post(("log", f"Retry {task.retries}/{MAX_RETRIES}: {task.title or url}"))
                     else:
                         task.status = "failed"
+                        self.post(("log", f"Failed after {MAX_RETRIES} retries: {task.title or url}"))
         finally:
             self._last_progress_post_ts.pop(url, None)
             self._last_progress_pct.pop(url, None)
@@ -865,6 +916,26 @@ class Api:
         folder = self.db.get_setting("last_folder", "")
         if folder and os.path.isdir(folder):
             open_path(folder)
+
+    def clear_temp_files(self):
+        """Clear all .part files from the temp folder."""
+        folder = self.db.get_setting("last_folder", "")
+        if not folder:
+            return 0
+        partial_folder = os.path.join(folder, ".partial")
+        if not os.path.isdir(partial_folder):
+            return 0
+        count = 0
+        try:
+            for f in os.listdir(partial_folder):
+                fpath = os.path.join(partial_folder, f)
+                if os.path.isfile(fpath):
+                    os.remove(fpath)
+                    count += 1
+            logging.info(f"API: Cleared {count} temp files from {partial_folder}")
+        except Exception as e:
+            logging.error(f"API: Error clearing temp files: {e}")
+        return count
 
     def set_max_concurrent(self, val: int):
         self.ctrl.set_max_concurrent(val)
@@ -955,6 +1026,7 @@ def main():
         api.crawl_cancel,
         api.browse_destination,
         api.open_folder,
+        api.clear_temp_files,
         api.set_max_concurrent,
         api.set_auto_delete,
         api.clear_finished,
