@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from .core.controller import download_controller
+from .core.crawler import init_crawler_service, crawler_service
 from .core.database import Database
 from .api.routes import router as api_router
 from .api.websockets import manager
@@ -15,6 +16,9 @@ async def lifespan(app: FastAPI):
     # Startup
     db = Database(DB_PATH)
     download_controller.set_db(db)
+
+    # Initialize crawler service with shared message queue
+    init_crawler_service(download_controller.msg_queue)
     
     # Restore settings
     max_c = db.get_setting("max_concurrent", 2)
