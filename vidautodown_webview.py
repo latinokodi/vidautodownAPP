@@ -348,14 +348,17 @@ class CrawlerService:
         def worker():
             yt_dlp_path = which_yt_dlp()
             if not yt_dlp_path:
+                logging.error("CRAWLER: yt-dlp not found")
                 self.ui_queue.put(("crawl_error", {"error": "yt-dlp not found"}))
                 return
 
+            logging.info(f"CRAWLER: Starting extraction from {page_url}")
             self.ui_queue.put(("crawl_start", {"page_url": page_url}))
 
             cmd = [
                 yt_dlp_path, "--flat-playlist", "--dump-json", "--no-warnings", page_url
             ]
+            logging.info(f"CRAWLER: Running command: {' '.join(cmd)}")
 
             urls_found = []
 
@@ -363,7 +366,7 @@ class CrawlerService:
                 proc = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,  # Capture stderr too
                     stdin=subprocess.DEVNULL,
                     text=True,
                     encoding="utf-8",
@@ -375,10 +378,20 @@ class CrawlerService:
                 with self._lock:
                     self._active_process = proc
 
+                # Read stderr in separate thread for logging
+                def log_stderr():
+                    if proc.stderr:
+                        for line in proc.stderr:
+                            logging.debug(f"CRAWLER stderr: {line.strip()}")
+
+                stderr_thread = threading.Thread(target=log_stderr, daemon=True)
+                stderr_thread.start()
+
                 if proc.stdout:
                     for line in proc.stdout:
                         if self._cancel_event.is_set():
                             proc.terminate()
+                            logging.info("CRAWLER: Cancelled by user")
                             self.ui_queue.put(("crawl_cancelled", {}))
                             return
 
@@ -389,25 +402,36 @@ class CrawlerService:
                         try:
                             data = json.loads(line)
                             url = data.get("url") or data.get("webpage_url")
+                            title = data.get("title", "Unknown")
+                            vid = data.get("id", "")
+
                             if url:
                                 # Convert http to https for video sites
                                 if url.startswith("http://"):
                                     url = "https://" + url[7:]
+
+                                logging.info(f"CRAWLER: Found URL: {url} | Title: {title[:50] if title else '?'}")
                                 urls_found.append({
                                     "url": url,
-                                    "title": data.get("title", "Unknown"),
-                                    "id": data.get("id", "")
+                                    "title": title,
+                                    "id": vid
                                 })
-                                self.ui_queue.put(("crawl_progress", {"count": len(urls_found), "latest": data.get("title", "")}))
-                        except json.JSONDecodeError:
+                                self.ui_queue.put(("crawl_progress", {"count": len(urls_found), "latest": title}))
+                            else:
+                                logging.warning(f"CRAWLER: No URL in JSON: {data.keys()}")
+                        except json.JSONDecodeError as e:
+                            logging.warning(f"CRAWLER: JSON decode error: {e}")
                             continue
 
                 proc.wait()
+                logging.info(f"CRAWLER: Process exited with code {proc.returncode}")
 
                 if not self._cancel_event.is_set():
+                    logging.info(f"CRAWLER: Complete - {len(urls_found)} URLs found")
                     self.ui_queue.put(("crawl_complete", {"urls": urls_found}))
 
             except Exception as e:
+                logging.error(f"CRAWLER: Exception: {e}", exc_info=True)
                 if not self._cancel_event.is_set():
                     self.ui_queue.put(("crawl_error", {"error": str(e)}))
             finally:
@@ -590,6 +614,7 @@ class DownloadController:
     def _fetch_info_worker(self, url: str) -> None:
         yt_dlp_path = which_yt_dlp()
         if not yt_dlp_path:
+            logging.error("DOWNLOAD: yt-dlp not found")
             self.post(("log", "Error: yt-dlp not found"))
             with self.tasks_lock:
                 task = self.tasks.get(url)
@@ -597,14 +622,17 @@ class DownloadController:
             self.post(("refresh", None))
             return
 
+        logging.info(f"DOWNLOAD: Fetching info for {url}")
         try:
             cmd = [yt_dlp_path, "--dump-json", "--no-warnings", url]
+            logging.debug(f"DOWNLOAD: Running {' '.join(cmd)}")
             proc = subprocess.run(
                 cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
                 creationflags=create_flags_no_window(), startupinfo=create_startupinfo_no_window(),
                 check=True, stdin=subprocess.DEVNULL
             )
             info = json.loads(proc.stdout)
+            logging.info(f"DOWNLOAD: Got info for '{info.get('title', '?')[:50]}' - {url}")
             with self.tasks_lock:
                 task = self.tasks.get(url)
                 if task:
@@ -624,6 +652,7 @@ class DownloadController:
                     if task.status != "cancelled":
                         task.status = "queued"
         except Exception as e:
+            logging.error(f"DOWNLOAD: Failed to fetch info for {url}: {e}", exc_info=True)
             with self.tasks_lock:
                 task = self.tasks.get(url)
                 if task:
@@ -643,6 +672,7 @@ class DownloadController:
 
     def _download_worker(self, url: str) -> None:
         yt_dlp_path = which_yt_dlp()
+        logging.info(f"DOWNLOAD: Starting download worker for {url}")
         try:
             with self.tasks_lock:
                 task = self.tasks.get(url)
@@ -653,6 +683,7 @@ class DownloadController:
                 current_retry = task.retries
 
             if not folder:
+                logging.error(f"DOWNLOAD: No destination folder for {url}")
                 self.post(("log", "Error: Destination not set."))
                 with self.tasks_lock:
                     if task: task.status = "failed"
@@ -690,7 +721,10 @@ class DownloadController:
                     if task: task.strategy = "Strategy C"
 
             cmd.append(url)
-            
+
+            logging.info(f"DOWNLOAD: Running yt-dlp for {url} with {strategy_name}")
+            logging.debug(f"DOWNLOAD: Command: {' '.join(cmd)}")
+
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding="utf-8", errors="replace",
                 universal_newlines=True, creationflags=create_flags_no_window(), startupinfo=create_startupinfo_no_window(),
@@ -705,10 +739,15 @@ class DownloadController:
                 for raw in iter(proc.stdout.readline, ""):
                     s = raw.strip()
                     if not s: continue
+
+                    # Log errors and warnings from yt-dlp
+                    if s.startswith("ERROR") or s.startswith("WARNING"):
+                        logging.warning(f"yt-dlp: {s}")
+
                     with self.tasks_lock:
                         task = self.tasks.get(url)
                         if not task or task.status != "downloading": break
-                    
+
                     pg = parse_progress(s)
                     if pg:
                         with self.tasks_lock:
@@ -735,6 +774,7 @@ class DownloadController:
             if task.status in ("paused", "cancelled"):
                 pass
             elif ret == 0:
+                logging.info(f"DOWNLOAD: Completed {url}")
                 with self.tasks_lock:
                     task.status = "completed"
                     task.progress = 1.0
@@ -743,6 +783,7 @@ class DownloadController:
                 if self.auto_delete_finished:
                     self.remove(url)
             else:
+                logging.error(f"DOWNLOAD: yt-dlp exited with code {ret} for {url}")
                 with self.tasks_lock:
                     if task.retries < MAX_RETRIES:
                         task.retries += 1
@@ -752,7 +793,8 @@ class DownloadController:
                         task.status = "failed"
                         self.post(("log", f"Failed: {task.title or url}"))
         except Exception as e:
-             with self.tasks_lock:
+            logging.error(f"DOWNLOAD: Exception for {url}: {e}", exc_info=True)
+            with self.tasks_lock:
                 task = self.tasks.get(url)
                 if task:
                     if task.retries < MAX_RETRIES:
@@ -785,7 +827,10 @@ class Api:
     def add_links(self, text: str):
         urls = extract_urls(text)
         if urls:
+            logging.info(f"API: Adding {len(urls)} URLs to queue: {urls[:3]}{'...' if len(urls) > 3 else ''}")
             self.ctrl.add_urls(urls)
+        else:
+            logging.warning(f"API: No URLs found in input: {text[:100]}...")
 
     def crawl_extract(self, page_url: str):
         """Start URL extraction from a page."""
