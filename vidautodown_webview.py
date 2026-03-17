@@ -334,6 +334,98 @@ class Database:
             pass
 
 # ==========================================
+# CORE: CRAWLER SERVICE
+# ==========================================
+
+class CrawlerService:
+    def __init__(self, ui_queue: "queue.Queue[tuple]"):
+        self.ui_queue = ui_queue
+        self._active_process: Optional[subprocess.Popen] = None
+        self._cancel_event = threading.Event()
+        self._lock = threading.Lock()
+
+    def extract_urls(self, page_url: str) -> None:
+        def worker():
+            yt_dlp_path = which_yt_dlp()
+            if not yt_dlp_path:
+                self.ui_queue.put(("crawl_error", {"error": "yt-dlp not found"}))
+                return
+
+            self.ui_queue.put(("crawl_start", {"page_url": page_url}))
+
+            cmd = [
+                yt_dlp_path, "--flat-playlist", "--dump-json", "--no-warnings", page_url
+            ]
+
+            urls_found = []
+
+            try:
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    creationflags=create_flags_no_window(),
+                    startupinfo=create_startupinfo_no_window()
+                )
+
+                with self._lock:
+                    self._active_process = proc
+
+                if proc.stdout:
+                    for line in proc.stdout:
+                        if self._cancel_event.is_set():
+                            proc.terminate()
+                            self.ui_queue.put(("crawl_cancelled", {}))
+                            return
+
+                        line = line.strip()
+                        if not line:
+                            continue
+
+                        try:
+                            data = json.loads(line)
+                            url = data.get("url") or data.get("webpage_url")
+                            if url:
+                                urls_found.append({
+                                    "url": url,
+                                    "title": data.get("title", "Unknown"),
+                                    "id": data.get("id", "")
+                                })
+                                self.ui_queue.put(("crawl_progress", {"count": len(urls_found), "latest": data.get("title", "")}))
+                        except json.JSONDecodeError:
+                            continue
+
+                proc.wait()
+
+                if not self._cancel_event.is_set():
+                    self.ui_queue.put(("crawl_complete", {"urls": urls_found}))
+
+            except Exception as e:
+                if not self._cancel_event.is_set():
+                    self.ui_queue.put(("crawl_error", {"error": str(e)}))
+            finally:
+                with self._lock:
+                    self._active_process = None
+
+        self._cancel_event.clear()
+        threading.Thread(target=worker, daemon=True).start()
+
+    def cancel(self) -> None:
+        self._cancel_event.set()
+        with self._lock:
+            if self._active_process:
+                try:
+                    self._active_process.terminate()
+                except Exception:
+                    pass
+                self._active_process = None
+
+
+# ==========================================
 # CORE: CONTROLLER (Same as before, stripped of UI refs)
 # ==========================================
 
@@ -681,8 +773,9 @@ class DownloadController:
 # ==========================================
 
 class Api:
-    def __init__(self, ctrl: DownloadController, db: Database, window):
+    def __init__(self, ctrl: DownloadController, crawler: CrawlerService, db: Database, window):
         self.ctrl = ctrl
+        self.crawler = crawler
         self.db = db
         self.window = window
 
@@ -690,6 +783,15 @@ class Api:
         urls = extract_urls(text)
         if urls:
             self.ctrl.add_urls(urls)
+
+    def crawl_extract(self, page_url: str):
+        """Start URL extraction from a page."""
+        if page_url and page_url.strip():
+            self.crawler.extract_urls(page_url.strip())
+
+    def crawl_cancel(self):
+        """Cancel ongoing extraction."""
+        self.crawler.cancel()
 
     def browse_destination(self):
         # Using pywebview's native folder dialog
@@ -752,17 +854,18 @@ class Api:
 
 def main():
     setup_logging()
-    
+
     # 1. Setup Backend
     db = Database(DB_FILE)
     ui_queue = queue.Queue(maxsize=1000)
     ctrl = DownloadController(ui_queue)
+    crawler = CrawlerService(ui_queue)
 
     # 2. Restore settings
     last_folder = db.get_setting("last_folder", "")
     if last_folder and os.path.isdir(last_folder):
         ctrl.set_destination(last_folder)
-    
+
     max_c = db.get_setting("max_concurrent", DEFAULT_MAX_CONCURRENT)
     if isinstance(max_c, int):
         ctrl.set_max_concurrent(max_c)
@@ -777,21 +880,23 @@ def main():
             if t.status not in ("completed", "cancelled"):
                 if t.status == "downloading": t.status = "queued"
                 ctrl.tasks[t.url] = t
-    
+
     # 4. Create Window
     window = webview.create_window(
-        APP_NAME, 
-        url="web/index.html", 
-        width=1000, 
-        height=700, 
+        APP_NAME,
+        url="web/index.html",
+        width=1000,
+        height=700,
         resizable=True,
         background_color='#0f2027'
     )
-    
+
     # 5. Bind API
-    api = Api(ctrl, db, window)
+    api = Api(ctrl, crawler, db, window)
     window.expose(
         api.add_links,
+        api.crawl_extract,
+        api.crawl_cancel,
         api.browse_destination,
         api.open_folder,
         api.set_max_concurrent,
@@ -810,8 +915,8 @@ def main():
 
     def event_poller():
         # Wait for window to load
-        time.sleep(1) 
-        
+        time.sleep(1)
+
         # Initial settings push
         window.evaluate_js(f"updateSettings({{ 'last_folder': {json.dumps(last_folder)}, 'max_concurrent': {max_c}, 'auto_delete': {json.dumps(auto_del)} }})")
         window.evaluate_js(f"refreshTasks({json.dumps([t.to_dict() for t in ctrl.tasks.values()])})")
@@ -828,6 +933,9 @@ def main():
                         window.evaluate_js(f"logMessage({safe_msg})")
                     elif evt in ("progress", "refresh"):
                         refresh_needed = True
+                    elif evt.startswith("crawl_"):
+                        # Crawler events
+                        window.evaluate_js(f"handleCrawlMessage({{ 'type': {json.dumps(evt)}, 'payload': {json.dumps(payload)} }})")
             except queue.Empty:
                 pass
 
@@ -835,7 +943,7 @@ def main():
                 with ctrl.tasks_lock:
                     tasks_list = [t.to_dict() for t in ctrl.tasks.values()]
                 window.evaluate_js(f"refreshTasks({json.dumps(tasks_list)})")
-            
+
             time.sleep(0.1)
 
     def autosave_loop():

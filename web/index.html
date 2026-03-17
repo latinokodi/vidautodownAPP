@@ -237,7 +237,133 @@
              align-items: center;
              justify-content: space-between;
         }
-        
+
+        /* Tab navigation */
+        .tab-nav {
+            display: flex;
+            gap: 10px;
+        }
+
+        .tab-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            color: rgba(255, 255, 255, 0.6);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tab-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .tab-btn.active {
+            background: rgba(79, 172, 254, 0.2);
+            border-color: rgba(79, 172, 254, 0.5);
+            color: #4facfe;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: contents;
+        }
+
+        /* Crawler styles */
+        .crawler-input-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .crawler-input-row input {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: #fff;
+            padding: 12px 15px;
+            font-size: 1em;
+        }
+
+        .crawler-input-row input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .crawler-input-row input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .extract-btn {
+            background: rgba(79, 172, 254, 0.2);
+            border: 1px solid rgba(79, 172, 254, 0.5);
+            color: #4facfe;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .extract-btn:hover {
+            background: rgba(79, 172, 254, 0.3);
+        }
+
+        .cancel-btn {
+            background: rgba(255, 77, 79, 0.2);
+            border: 1px solid rgba(255, 77, 79, 0.5);
+            color: #ff4d4f;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .cancel-btn:hover {
+            background: rgba(255, 77, 79, 0.3);
+        }
+
+        .crawler-progress {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .crawler-progress .count {
+            color: #4facfe;
+            font-weight: 600;
+        }
+
+        .crawler-progress .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #4facfe;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .crawler-error {
+            margin-top: 15px;
+            padding: 12px;
+            background: rgba(255, 77, 79, 0.1);
+            border: 1px solid rgba(255, 77, 79, 0.3);
+            border-radius: 8px;
+            color: #ff4d4f;
+        }
+
         h1 {
             margin: 0;
             font-size: 1.5rem;
@@ -254,61 +380,99 @@
 <body>
     <div class="header">
         <h1>VidAutoDown</h1>
+        <div class="tab-nav">
+            <button class="tab-btn active" onclick="switchTab('downloads')">
+                <span>⬇️</span> Downloads
+            </button>
+            <button class="tab-btn" onclick="switchTab('crawler')">
+                <span>🔍</span> Crawler
+            </button>
+        </div>
     </div>
 
     <div class="container">
-        <!-- Left Sidebar -->
-        <div class="sidebar glass-panel" style="padding: 15px;">
-            <h3>Add Links</h3>
-            <textarea id="linkInput" placeholder="Paste links here (one per line)..." oninput="handleInput()"></textarea>
-            
-            <hr style="border: 0; border-top: 1px solid var(--glass-border); width: 100%; margin: 15px 0;">
+        <!-- Downloads Tab -->
+        <div id="downloads-tab" class="tab-content active">
+            <!-- Left Sidebar -->
+            <div class="sidebar glass-panel" style="padding: 15px;">
+                <h3>Add Links</h3>
+                <textarea id="linkInput" placeholder="Paste links here (one per line)..." oninput="handleInput()"></textarea>
 
-            <h3>Settings</h3>
-            <div class="controls">
-                <button onclick="browseDestination()" style="flex: 1;">📁 Destination</button>
-                <button onclick="openFolder()" title="Open Folder">🗂</button>
+                <hr style="border: 0; border-top: 1px solid var(--glass-border); width: 100%; margin: 15px 0;">
+
+                <h3>Settings</h3>
+                <div class="controls">
+                    <button onclick="browseDestination()" style="flex: 1;">📁 Destination</button>
+                    <button onclick="openFolder()" title="Open Folder">🗂</button>
+                </div>
+                <div style="font-size: 0.8em; color: rgba(255,255,255,0.6); margin-top: 5px;" id="destLabel">
+                    Not selected
+                </div>
+
+                <div style="margin-top: 15px; display: flex; align-items: center; gap: 10px;">
+                    <label for="maxConcurrent">Max Downloads:</label>
+                    <select id="maxConcurrent" onchange="setMaxConcurrent(this.value)" style="background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--glass-border); border-radius: 4px; padding: 2px;">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                    </select>
+                </div>
+
+                <div style="margin-top: 10px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="autoDelete" onchange="toggleAutoDelete(this.checked)">
+                        Auto-delete from list when finished
+                    </label>
+                </div>
+
+                <hr style="border: 0; border-top: 1px solid var(--glass-border); width: 100%; margin: 15px 0;">
+
+                <h3>Log</h3>
+                <div class="console" id="consoleOutput"></div>
+
+                 <div class="controls" style="margin-top: 10px;">
+                     <button class="danger" onclick="clearFinished()" style="flex: 1;">Clear Finished</button>
+                </div>
             </div>
-            <div style="font-size: 0.8em; color: rgba(255,255,255,0.6); margin-top: 5px;" id="destLabel">
-                Not selected
-            </div>
 
-            <div style="margin-top: 15px; display: flex; align-items: center; gap: 10px;">
-                <label for="maxConcurrent">Max Downloads:</label>
-                <select id="maxConcurrent" onchange="setMaxConcurrent(this.value)" style="background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--glass-border); border-radius: 4px; padding: 2px;">
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                    <option value="5">5</option>
-                    <option value="6">6</option>
-                </select>
-            </div>
-
-            <div style="margin-top: 10px;">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <input type="checkbox" id="autoDelete" onchange="toggleAutoDelete(this.checked)">
-                    Auto-delete from list when finished
-                </label>
-            </div>
-
-            <hr style="border: 0; border-top: 1px solid var(--glass-border); width: 100%; margin: 15px 0;">
-
-            <h3>Log</h3>
-            <div class="console" id="consoleOutput"></div>
-            
-             <div class="controls" style="margin-top: 10px;">
-                 <button class="danger" onclick="clearFinished()" style="flex: 1;">Clear Finished</button>
+            <!-- Main Content -->
+            <div class="main-content glass-panel" style="padding: 0;">
+                <div style="padding: 15px; border-bottom: 1px solid var(--glass-border);">
+                    <h2 style="margin: 0;">Download Queue</h2>
+                </div>
+                <div class="task-list" id="taskList" style="padding: 10px;">
+                    <!-- Tasks will be injected here -->
+                </div>
             </div>
         </div>
 
-        <!-- Main Content -->
-        <div class="main-content glass-panel" style="padding: 0;">
-            <div style="padding: 15px; border-bottom: 1px solid var(--glass-border);">
-                <h2 style="margin: 0;">Download Queue</h2>
-            </div>
-            <div class="task-list" id="taskList" style="padding: 10px;">
-                <!-- Tasks will be injected here -->
+        <!-- Crawler Tab -->
+        <div id="crawler-tab" class="tab-content" style="width: 100%;">
+            <div class="glass-panel" style="padding: 20px; width: 100%;">
+                <h2 style="margin: 0 0 20px 0;">Link Crawler</h2>
+
+                <div class="crawler-input-row">
+                    <input type="text" id="crawlerUrlInput" placeholder="Enter video page URL">
+                    <button id="crawlerActionBtn" class="extract-btn" onclick="handleCrawlerAction()">
+                        🔍 Extract
+                    </button>
+                </div>
+
+                <div id="crawlerProgressArea" style="display: none;">
+                    <div class="crawler-progress">
+                        <div class="spinner"></div>
+                        <span>Extracting URLs...</span>
+                        <span class="count" id="crawlerCount">0 found</span>
+                    </div>
+                    <div class="progress-bar" style="margin-top: 10px;">
+                        <div class="progress-fill" id="crawlerProgressBar" style="width: 10%;"></div>
+                    </div>
+                </div>
+
+                <div id="crawlerErrorArea" class="crawler-error" style="display: none;"></div>
             </div>
         </div>
     </div>
@@ -317,10 +481,130 @@
         // State
         const tasks = {};
         let typingTimer;
+        let crawlerLoading = false;
+        let crawlerCount = 0;
+
+        // Tab switching
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            event.target.closest('.tab-btn').classList.add('active');
+            document.getElementById(`${tab}-tab`).classList.add('active');
+
+            if (tab === 'downloads') {
+                document.getElementById('downloads-tab').style.display = 'contents';
+                document.getElementById('crawler-tab').style.display = 'none';
+            } else {
+                document.getElementById('downloads-tab').style.display = 'none';
+                document.getElementById('crawler-tab').style.display = 'block';
+            }
+        }
+
+        // Initialize tab display
+        document.getElementById('downloads-tab').style.display = 'contents';
 
         function handleInput() {
             clearTimeout(typingTimer);
             typingTimer = setTimeout(addLinks, 500);
+        }
+
+        // Crawler functions
+        async function handleCrawlerAction() {
+            if (crawlerLoading) {
+                await cancelCrawl();
+            } else {
+                await startCrawl();
+            }
+        }
+
+        async function startCrawl() {
+            const input = document.getElementById('crawlerUrlInput');
+            const url = input.value.trim();
+
+            if (!url) {
+                showCrawlerError('Please enter a URL');
+                return;
+            }
+
+            crawlerLoading = true;
+            crawlerCount = 0;
+            hideCrawlerError();
+            updateCrawlerUI();
+
+            try {
+                await pywebview.api.crawl_extract(url);
+            } catch (e) {
+                showCrawlerError('Failed to start extraction');
+                crawlerLoading = false;
+                updateCrawlerUI();
+            }
+        }
+
+        async function cancelCrawl() {
+            try {
+                await pywebview.api.crawl_cancel();
+            } catch (e) {
+                // Ignore
+            }
+            resetCrawler();
+            logMessage('Extraction cancelled');
+        }
+
+        function resetCrawler() {
+            crawlerLoading = false;
+            crawlerCount = 0;
+            updateCrawlerUI();
+        }
+
+        function updateCrawlerUI() {
+            const btn = document.getElementById('crawlerActionBtn');
+            const progressArea = document.getElementById('crawlerProgressArea');
+            const input = document.getElementById('crawlerUrlInput');
+
+            if (crawlerLoading) {
+                btn.textContent = '✖ Cancel';
+                btn.className = 'cancel-btn';
+                input.disabled = true;
+                progressArea.style.display = 'block';
+            } else {
+                btn.textContent = '🔍 Extract';
+                btn.className = 'extract-btn';
+                input.disabled = false;
+                progressArea.style.display = 'none';
+            }
+
+            document.getElementById('crawlerCount').textContent = `${crawlerCount} found`;
+            document.getElementById('crawlerProgressBar').style.width = `${Math.min(crawlerCount * 5, 90)}%`;
+        }
+
+        function showCrawlerError(msg) {
+            const errorArea = document.getElementById('crawlerErrorArea');
+            errorArea.textContent = msg;
+            errorArea.style.display = 'block';
+        }
+
+        function hideCrawlerError() {
+            document.getElementById('crawlerErrorArea').style.display = 'none';
+        }
+
+        function handleCrawlMessage(payload) {
+            if (payload.type === 'crawl_start') {
+                crawlerLoading = true;
+                updateCrawlerUI();
+            } else if (payload.type === 'crawl_progress') {
+                crawlerCount = payload.payload.count;
+                document.getElementById('crawlerCount').textContent = `${crawlerCount} found`;
+                document.getElementById('crawlerProgressBar').style.width = `${Math.min(crawlerCount * 5, 90)}%`;
+            } else if (payload.type === 'crawl_complete') {
+                logMessage(`Crawl complete: ${payload.payload.urls?.length || 0} URLs found`);
+                resetCrawler();
+            } else if (payload.type === 'crawl_error') {
+                showCrawlerError(payload.payload.error);
+                resetCrawler();
+            } else if (payload.type === 'crawl_cancelled') {
+                resetCrawler();
+            }
         }
 
         // API Bridge wrappers
