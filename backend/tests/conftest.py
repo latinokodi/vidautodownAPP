@@ -17,8 +17,12 @@ def msg_queue():
 
 @pytest.fixture
 def mock_subprocess():
-    """Mock subprocess.Popen for testing without actual yt-dlp calls."""
-    with patch('subprocess.Popen') as mock_popen:
+    """Mock subprocess.Popen and shutil.which for testing without actual yt-dlp calls."""
+    with patch('subprocess.Popen') as mock_popen, \
+         patch('shutil.which') as mock_which:
+        # Mock yt-dlp to be found as just "yt-dlp" for consistent test expectations
+        mock_which.return_value = "yt-dlp"
+
         mock_process = MagicMock()
         mock_process.stdout = MagicMock()
         mock_process.stderr = MagicMock()
