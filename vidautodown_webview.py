@@ -696,12 +696,15 @@ class DownloadController:
                 return
             
             os.makedirs(folder, exist_ok=True)
+            partial_folder = os.path.join(folder, ".partial")
+            os.makedirs(partial_folder, exist_ok=True)
             with self.tasks_lock:
                 if task: task.dest = folder
 
             base_cmd = [
                 yt_dlp_path, "--newline", "--progress", "-S", "res,ext:mp4:m4a", "--recode", "mp4",
-                "-P", folder, "-o", self.output_tpl, "--no-warnings", "--no-overwrites", "--continue",
+                "-P", f"home:{folder}", "-P", f"temp:{partial_folder}",
+                "-o", self.output_tpl, "--no-warnings", "--no-overwrites", "--continue",
                 "--retries", "10", "--fragment-retries", "10"
             ]
             cmd = list(base_cmd)
