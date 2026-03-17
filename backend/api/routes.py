@@ -4,6 +4,7 @@ from typing import List, Optional
 from ..core.controller import download_controller
 from ..core.database import Database
 from ..core.models import Task
+from ..core.crawler import crawler_service
 
 router = APIRouter()
 
@@ -92,3 +93,30 @@ def browse_folder():
 def open_destination():
     download_controller.open_destination()
     return {"status": "ok"}
+
+
+# Crawler API endpoints
+
+class CrawlRequest(BaseModel):
+    page_url: str
+
+
+@router.post("/crawl")
+def start_crawl(req: CrawlRequest):
+    """Start URL extraction from a web page using yt-dlp."""
+    if not crawler_service:
+        raise HTTPException(status_code=503, detail="Crawler service not initialized")
+
+    if not req.page_url or not req.page_url.strip():
+        raise HTTPException(status_code=400, detail="URL is required")
+
+    crawler_service.extract_urls(req.page_url.strip())
+    return {"status": "started"}
+
+
+@router.post("/crawl/cancel")
+def cancel_crawl():
+    """Cancel any active URL extraction."""
+    if crawler_service:
+        crawler_service.cancel()
+    return {"status": "cancelled"}
