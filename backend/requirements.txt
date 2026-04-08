@@ -1,6 +1,7 @@
-fastapi>=0.110.0
-uvicorn>=0.27.0
-yt-dlp>=2024.04.09
-websockets>=12.0
-pydantic>=2.0
-pywebview>=5.0
+aiohttp>=3.9.0
+aiofiles>=23.0.0
+yt-dlp>=2024.11.04
+pyinstaller>=6.0.0
+brotli
+certifi
+PyExecJS

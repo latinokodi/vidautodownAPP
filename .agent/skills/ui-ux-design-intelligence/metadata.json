@@ -1,0 +1,45 @@
+{
+  "version": "2.0.0",
+  "organization": "UI/UX Design Intelligence",
+  "date": "February 2026",
+  "abstract": "Comprehensive UI/UX design intelligence system containing 50+ UI styles, 97 color palettes, 57 font pairings, 99 UX guidelines, and 25 chart types across 9 technology stacks. Provides actionable design recommendations with code examples and accessibility requirements.",
+  "categories": [
+    "accessibility",
+    "interaction",
+    "performance",
+    "layout",
+    "typography",
+    "color",
+    "animation",
+    "style-selection"
+  ],
+  "stacks_supported": [
+    "html-tailwind",
+    "react",
+    "nextjs",
+    "vue",
+    "svelte",
+    "swiftui",
+    "react-native",
+    "flutter",
+    "shadcn"
+  ],
+  "statistics": {
+    "styles": 50,
+    "color_palettes": 97,
+    "font_pairings": 57,
+    "ux_guidelines": 99,
+    "chart_types": 25,
+    "priority_rules": 45
+  },
+  "references": [
+    "https://www.w3.org/WAI/WCAG22/quickref/",
+    "https://developer.apple.com/design/human-interface-guidelines/",
+    "https://m3.material.io/",
+    "https://tailwindcss.com/docs",
+    "https://www.radix-ui.com/",
+    "https://www.figma.com/community",
+    "https://heroicons.com/",
+    "https://lucide.dev/"
+  ]
+}
