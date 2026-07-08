@@ -3,6 +3,9 @@ const path = require('path');
 const { spawn, execSync } = require('child_process');
 const fs = require('fs');
 
+app.commandLine.appendSwitch('disable-gpu-cache');
+app.commandLine.appendSwitch('disable-disk-cache');
+
 let mainWindow = null;
 let pythonProcess = null;
 const BACKEND_PORT = 8765;

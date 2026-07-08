@@ -90,3 +90,4 @@ project-name/
 - Wrap Chrome APIs in promises
 - Minimize permissions
 - Handle offline gracefully
+- For implementation of Manifest V3 features, background workers, and cross-context messaging, use the `@chrome-extension-developer` specialist agent and load the `chrome-extension-developer` skill.

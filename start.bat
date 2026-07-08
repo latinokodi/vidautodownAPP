@@ -49,6 +49,22 @@ echo Updating yt-dlp to latest version...
 venv\Scripts\python.exe -m pip install --quiet --upgrade yt-dlp
 echo.
 
+REM Install PhantomJS for Pornhub support
+if not exist "venv\Scripts\phantomjs.exe" (
+    echo Installing PhantomJS for Pornhub support...
+    curl -L "https://bitbucket.org/ariya/phantomjs/downloads/phantomjs-2.1.1-windows.zip" -o phantomjs.zip 2>nul
+    if exist phantomjs.zip (
+        powershell -Command "Expand-Archive -Path phantomjs.zip -DestinationPath . -Force" 2>nul
+        if exist "phantomjs-2.1.1-windows\bin\phantomjs.exe" (
+            move /y "phantomjs-2.1.1-windows\bin\phantomjs.exe" "venv\Scripts\" >nul
+            echo PhantomJS installed.
+        )
+        del /f /q phantomjs.zip >nul 2>&1
+        rmdir /s /q "phantomjs-2.1.1-windows" >nul 2>&1
+    )
+    echo.
+)
+
 REM Check Node.js
 where node >nul 2>nul
 if errorlevel 1 (
@@ -70,18 +86,16 @@ if not exist "node_modules" (
     echo.
 )
 
-REM Build frontend if not exists
-if not exist "dist" (
-    echo Building frontend...
-    call npm run build
-    if errorlevel 1 (
-        echo Failed to build frontend.
-        pause
-        exit /b 1
-    )
-    echo Frontend built.
-    echo.
+REM Build frontend (always rebuild to pick up changes)
+echo Building frontend...
+call npm run build
+if errorlevel 1 (
+    echo Failed to build frontend.
+    pause
+    exit /b 1
 )
+echo Frontend built.
+echo.
 
 REM Check for yt-dlp
 where yt-dlp >nul 2>nul

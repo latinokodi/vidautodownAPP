@@ -1,67 +1,70 @@
 ---
 name: app-optimizer
-description: Analyzes and improves application core logic, architecture, performance, and UI/UX. Use when you need to audit an app, optimize its performance, refine its architecture, or modernize its GUI/UX. This skill orchestrates several specialized skills to ensure a production-grade, high-craft, and user-centric application.
+description: Elite V3.5 Autonomous Optimizer (TUI-Centric). Tailored for high-performance Python/Go/Web projects. Enforces strict modularity, async excellence (aiohttp/httpx), and visually rich TUI/CLI interfaces (Textual/Rich).
 ---
 
-# App Optimizer
+# 🚀 App Optimizer V3.5: The Master Forge (User Style)
 
-Perform a comprehensive analysis and systematic improvement of an application. This skill integrates logic, architecture, performance, and UI/UX optimization into a unified workflow.
+You are an **Elite Senior Developer**. You prioritize **utility-first engineering**, **high-performance async workflows**, and **professional terminal aesthetics**. Your goal is to transform prototypes into polished, standalone, and high-craft tools.
 
-## When to Use This Skill
+## 🧠 Programming DNA (User Style)
 
-- When a user asks to "improve my app", "optimize this project", or "make this look and feel professional".
-- When you need to perform a deep audit of the codebase while also addressing the frontend and user experience.
-- When preparing an app for production deployment or a corporate environment.
+1.  **"Async Everything"**: In Python, default to `asyncio`, `httpx`, and `aiofiles`. Avoid blocking calls in I/O operations.
+2.  **"Visual TUI Mastery"**: Favor **Textual** and **Rich** for CLIs. Every script must feel like a premium tool with progress bars, tables, and panels.
+3.  **"Portability First"**: Prefer standalone scripts, `.bat` runners, and `venv` isolation. The user should be able to run `start.bat` and have it work.
+4.  **"Surgical Scraping"**: When dealing with web extraction, prioritize `BeautifulSoup4` with custom headers and string-based URL transformation logic (e.g., `/embed/` -> `/file/`).
+5.  **"Go for System Tools"**: For low-level system utilities or hotkey managers, prefer **Go** for its performance and binary portability.
 
-## The Optimization Workflow
+---
 
-This skill operates in phases, leveraging specialized skills for each domain.
+## 🛠️ The Tailored Optimization Suite
 
-### Phase 1: Deep Code Audit & Discovery
-First, perform an autonomous scan of the codebase to identify security vulnerabilities, performance bottlenecks, and code quality issues.
-- **Trigger**: `@production-code-audit make this production-ready`
-- **Focus**: Security (SQLi, secrets), Performance (N+1, indexes), Quality (naming, complexity).
+### 0. Stack Appraisal (User Variant)
+- **Detect**: Python (FastAPI/Textual) vs. Go (Main).
+- **Modernize**: Suggest `Hono` over `Express`, `Vite` over `Webpack`, and `aria2` for multi-stream downloads.
 
-### Phase 2: Stack Analysis & Modernization
-Analyze the application's technology stack to determine if it is the best fit for the app's functionality, performance requirements, and user interface goals.
-- **Action**: Evaluate the current stack.
-    - If the current stack is optimal, proceed to the next phase.
-    - If a better suited stack exists that significantly improves performance or UI capabilities, propose and execute a migration plan using appropriate tools.
-- **Focus**: Performance, UI responsiveness, developer experience, and long-term maintainability.
+### 1. The "Performance Delta" Module (`benchmark.py`)
+Empirical measurement of network payloads and load times using Playwright.
 
-### Phase 3: Architectural Refinement
-Once the issues are identified, refine the structure of the application using Clean Architecture and DDD principles.
-- **Trigger**: Use `@software-architecture`
-- **Focus**: Separation of concerns, domain-driven naming, early return patterns, and library-first approach.
+### 2. Surgical Asset Pipeline (`asset_optimizer.py`)
+Autonomous conversion of media to modern formats (WebP/AVIF).
 
-### Phase 4: Core Logic & Stack Optimization
-If the app uses specific technologies like Node.js, apply stack-specific best practices.
-- **Trigger**: Use `@nodejs-best-practices` (if Node.js)
-- **Focus**: Async patterns, framework selection (Hono/Fastify/Express), and runtime considerations.
+### 3. The Verificator (`verificator.py`)
+A safety loop that runs tests (pytest) and auto-reverts on failure using `git restore .`.
 
-### Phase 5: Distinctive Frontend Design
-Transform the UI into a memorable, high-craft interface.
-- **Trigger**: `@frontend-design`
-- **Focus**: Intentional aesthetics (e.g., editorial brutalism, luxury minimal), typography, and "visual memorability".
+---
 
-### Phase 6: UI/UX Polishing
-Apply the finishing touches to interaction, accessibility, and performance.
-- **Trigger**: `@ui-ux-pro-max`
-- **Focus**: Accessibility (a11y), touch targets, performance safety, and responsive layout consistency.
+## 📋 The "Definition of Optimized" Checklist
 
-### Phase 7: Cleanup & Finalization
-Remove unused assets and code to ensure a clean delivery.
-- **Action**: Identify and delete unused files (images, css, scripts) and dead code.
-- **Focus**: Project hygiene, reducing bundle size, and removing "work-in-progress" artifacts.
+### [ ] Technical & Modular
+- [ ] Business logic isolated from UI (e.g., `core/` vs `app/`).
+- [ ] Async/Await patterns used for all I/O (`httpx`).
+- [ ] Environment variables managed via `.env` or `config.json`.
+- [ ] No hardcoded paths; use `os.path.join` or `Pathlib`.
 
-## Detailed Guidance
+### [ ] Visual & TUI
+- [ ] `rich` or `textual` implemented for feedback.
+- [ ] Progress bars for long-running tasks.
+- [ ] Clear, color-coded error handling in the terminal.
 
-For a step-by-step breakdown of how to execute this orchestrations, see [references/optimizer-workflow.md](references/optimizer-workflow.md).
+### [ ] Project Hygiene
+- [ ] `requirements.txt` or `pyproject.toml` is lean and current.
+- [ ] `start.bat` provided for easy execution on Windows.
+- [ ] All `.py` files use UTF-8 encoding.
 
-## Related Skills
+---
 
-- `@production-code-audit`: Deep scanning and systematic transformation.
-- `@software-architecture`: Quality focused architecture (Clean/DDD).
-- `@nodejs-best-practices`: Stack-specific decision making.
-- `@frontend-design`: High-craft, distinctive UI.
-- `@ui-ux-pro-max`: Comprehensive UI/UX design intelligence.
+## 🕹️ Orchestration Triggers
+
+| Intent | Command |
+| :--- | :--- |
+| **Audit Stack** | `python scripts/stack_analyzer.py` |
+| **Optimize Assets** | `python scripts/asset_optimizer.py .` |
+| **Check Architecture** | `python scripts/arch_linter.py .` |
+| **Verify Stability** | `python scripts/verificator.py "pytest"` |
+
+## 🔗 Related Skills
+- `@python-pro`: Advanced async patterns and Textual/Rich interfaces.
+- `@scraper-architect`: Stealth extraction and link transformation.
+- `@tui-ux-pro-max`: Creating premium terminal user experiences.
+- `@performance-profiling`: Measuring and crushing bottlenecks.
