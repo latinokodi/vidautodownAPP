@@ -776,11 +776,16 @@ class CrawlerService:
                 import urllib.parse
                 is_xv_profile = False
                 xv_username = None
+                xv_path_base = None
                 domain = "www.xvideos.com"
                 
                 is_eporner_profile = False
                 eporner_username = None
                 eporner_domain = "www.eporner.com"
+                
+                is_xhamster_creator = False
+                xhamster_username = None
+                xhamster_domain = "xhamster.com"
                 
                 parsed = urllib.parse.urlparse(normalized_page_url)
                 if parsed.netloc:
@@ -808,10 +813,12 @@ class CrawlerService:
                                 if len(parts) >= 2:
                                     is_xv_profile = True
                                     xv_username = parts[1]
+                                    xv_path_base = f"{first_segment}/{xv_username}"
                             elif first_segment not in system_paths:
                                 if not (re.match(r'^video\d+', first_segment) or re.match(r'^video\.', first_segment)):
                                     is_xv_profile = True
                                     xv_username = first_segment
+                                    xv_path_base = xv_username
                     elif 'eporner' in domain_lower:
                         eporner_domain = domain_lower
                         path = parsed.path.strip('/')
@@ -820,6 +827,14 @@ class CrawlerService:
                             if len(parts) >= 2 and parts[0].lower() == 'profile':
                                 is_eporner_profile = True
                                 eporner_username = parts[1]
+                    elif 'xhamster' in domain_lower:
+                        xhamster_domain = domain_lower
+                        path = parsed.path.strip('/')
+                        if path:
+                            parts = path.split('/')
+                            if len(parts) >= 2 and parts[0].lower() == 'creators':
+                                is_xhamster_creator = True
+                                xhamster_username = parts[1]
                 
                 if is_xv_profile and xv_username:
                     import cloudscraper
@@ -838,6 +853,14 @@ class CrawlerService:
                             'desktop': True
                         }
                     )
+                    scraper.headers.update({'X-Requested-With': 'XMLHttpRequest'})
+                    
+                    # Fetch profile page first to establish session/cookies
+                    try:
+                        logger.info(f"[Crawler] Fetching profile page to establish session: {normalized_page_url}")
+                        scraper.get(normalized_page_url, timeout=15)
+                    except Exception as e:
+                        logger.warning(f"[Crawler] Profile page fetch failed: {e}")
                     
                     while True:
                         if self._cancel_event.is_set():
@@ -846,22 +869,27 @@ class CrawlerService:
                             return
                             
                         # Default sorting to best
-                        ajax_url = f"https://{domain}/channels/{xv_username}/videos/best/{page}"
+                        ajax_url = f"https://{domain}/{xv_path_base}/videos/best/{page}"
                         logger.info(f"[Crawler] Fetching page {page} AJAX: {ajax_url}")
                         
                         res = scraper.get(ajax_url, timeout=15)
                         if res.status_code != 200:
-                            logger.error(f"[Crawler] Failed to fetch page {page}: {res.status_code}")
+                            logger.error(f"[Crawler] Failed to fetch AJAX: {res.status_code}")
                             break
                             
                         try:
                             data = res.json()
                         except Exception as je:
-                            logger.error(f"[Crawler] Failed to parse JSON on page {page}: {je}")
+                            logger.error(f"[Crawler] Failed to parse JSON: {je}")
                             break
                             
                         videos = data.get("videos")
-                        if not videos or not isinstance(videos, list):
+                        if isinstance(videos, dict):
+                            videos = list(videos.values())
+                        elif not videos or not isinstance(videos, list):
+                            videos = [v for k, v in data.items() if isinstance(v, dict) and ("eid" in v or "id" in v) and k.isdigit()]
+                        
+                        if not videos:
                             logger.info(f"[Crawler] No more videos found or invalid format on page {page}")
                             break
                             
@@ -909,6 +937,140 @@ class CrawlerService:
                         if playlist_count and len(all_urls_found) >= playlist_count:
                             logger.info(f"[Crawler] Crawled all {len(all_urls_found)} videos, ending loop")
                             break
+                            
+                    logger.info(f"[Crawler] ========== COMPLETE: {len(all_urls_found)} URLs ==========")
+                    if not self._cancel_event.is_set():
+                        self.broadcast("crawl_complete", {"urls": all_urls_found, "parent_title": parent_title})
+                    return
+
+                if is_xhamster_creator and xhamster_username:
+                    import cloudscraper
+                    from bs4 import BeautifulSoup
+                    import random
+                    import time
+                    
+                    logger.info(f"[Crawler] Detected xHamster creator: {xhamster_username} on domain: {xhamster_domain}")
+                    self.broadcast("crawl_start", {"url": normalized_page_url})
+                    
+                    parent_title = xhamster_username
+                    all_urls_found = []
+                    playlist_count = None
+                    page = 1
+                    max_pages = None
+                    visited_urls = set()
+                    
+                    scraper = cloudscraper.create_scraper(
+                        browser={
+                            'browser': 'chrome',
+                            'platform': 'windows',
+                            'desktop': True
+                        }
+                    )
+                    scraper.headers.update({
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Referer': 'https://xhamster.com/',
+                    })
+                    
+                    # Start from base creator URL (Home tab)
+                    base_creator_url = normalized_page_url.rstrip('/')
+                    
+                    while True:
+                        if self._cancel_event.is_set():
+                            logger.info("[Crawler] Cancelled by user")
+                            self.broadcast("crawl_cancelled", {})
+                            return
+                        
+                        # Build page URL: page 1 = base URL, page N = base/N
+                        if page == 1:
+                            current_url = base_creator_url
+                        else:
+                            current_url = f"{base_creator_url}/{page}"
+                            
+                        if current_url in visited_urls:
+                            logger.info(f"[Crawler] URL already visited: {current_url}, ending loop")
+                            break
+                        visited_urls.add(current_url)
+                        
+                        logger.info(f"[Crawler] Fetching page {page}: {current_url}")
+                        try:
+                            res = scraper.get(current_url, timeout=15)
+                        except Exception as fe:
+                            logger.error(f"[Crawler] Failed to fetch page {page}: {fe}")
+                            break
+                            
+                        if res.status_code != 200:
+                            logger.error(f"[Crawler] Failed to fetch page {page}: status {res.status_code}")
+                            break
+                            
+                        soup = BeautifulSoup(res.text, "html.parser")
+                        
+                        # Detect total pages from pagination on first page
+                        if max_pages is None:
+                            pager_nav = soup.find("nav", attrs={"data-role": "pagination-cleaner"})
+                            if pager_nav:
+                                page_nums = []
+                                for a in pager_nav.find_all("a"):
+                                    text = a.get_text(strip=True)
+                                    if text.isdigit():
+                                        page_nums.append(int(text))
+                                if page_nums:
+                                    max_pages = max(page_nums)
+                                    logger.info(f"[Crawler] Total pages detected: {max_pages}")
+                                    
+                        # Try to detect total upload count on first page
+                        if playlist_count is None:
+                            total_match = re.search(r'Short videos\s*(\d[\d,]*)', res.text, re.IGNORECASE)
+                            if total_match:
+                                playlist_count = int(total_match.group(1).replace(',', '').replace('.', ''))
+                                logger.info(f"[Crawler] Video count detected: {playlist_count}")
+                                
+                        page_new_urls = []
+                        # Extract video links from the page
+                        for a in soup.find_all("a", href=lambda h: h and "/videos/" in h):
+                            href = a.get("href")
+                            if not href or "/creators/videos/" in href:
+                                continue
+                            # xHamster video URLs look like: /videos/some-title-xhXXXXX
+                            if not re.search(r'/videos/[^/]+-xh[A-Za-z0-9]+', href):
+                                continue
+                            title = a.get("title") or a.get_text(strip=True)
+                            full_url = f"https://{xhamster_domain}{href}" if href.startswith('/') else href
+                            normalized = normalize_url(full_url)
+                            
+                            existing = next((item for item in all_urls_found if item["url"] == normalized), None)
+                            if not existing:
+                                item = {"url": normalized, "title": title or "Unknown"}
+                                all_urls_found.append(item)
+                                page_new_urls.append(normalized)
+                                logger.info(f"[Crawler] Found #{len(all_urls_found)}: {(title or 'Unknown')[:60]}")
+                                self.broadcast(
+                                    "crawl_progress",
+                                    {
+                                        "count": len(all_urls_found),
+                                        "latest": (title or "Unknown")[:50],
+                                        "total": playlist_count,
+                                    },
+                                )
+                                
+                        if not page_new_urls:
+                            logger.info(f"[Crawler] No new videos on page {page}, ending loop")
+                            break
+                            
+                        if playlist_count and len(all_urls_found) >= playlist_count:
+                            logger.info(f"[Crawler] Crawled all {len(all_urls_found)} videos, ending loop")
+                            break
+                            
+                        # Check if we've reached the last page
+                        if max_pages and page >= max_pages:
+                            logger.info(f"[Crawler] Reached last page ({max_pages}), ending loop")
+                            break
+                            
+                        page += 1
+                        sleep_time = random.uniform(0.5, 1.0)
+                        logger.info(f"[Crawler] Sleeping {sleep_time:.2f}s before fetching next page...")
+                        time.sleep(sleep_time)
                             
                     logger.info(f"[Crawler] ========== COMPLETE: {len(all_urls_found)} URLs ==========")
                     if not self._cancel_event.is_set():
@@ -1194,6 +1356,8 @@ class DownloadController:
         self._progress_ts: Dict[str, float] = {}
         self.auto_delete = False
         self.skip_duplicates = True
+        self.total_added = 0
+        self.skipped_count = 0
 
         self._load_settings()
         self._load_tasks()
@@ -1319,13 +1483,9 @@ class DownloadController:
                             return
                         else:
                             with self.lock:
-                                task = self.tasks.get(url)
-                                if task:
-                                    task.status = TaskStatus.DUPLICATE
-                                    task.filename = existing.get("filename")
-                                    task.title = f"[DUPLICATE - filesystem] {title}"
-                                    task.existing_file = existing
-                            logger.info(f"Duplicate file detected for Eporner URL {url}")
+                                self.tasks.pop(url, None)
+                                self.skipped_count += 1
+                            logger.info(f"Skipped duplicate Eporner file for URL {url}")
                             self._broadcast_refresh()
                             return
                             
@@ -1410,14 +1570,11 @@ class DownloadController:
                             self._broadcast_refresh()
                             return
                         else:
+                            # Duplicate file — remove from queue silently
                             with self.lock:
-                                task = self.tasks.get(url)
-                                if task:
-                                    task.status = TaskStatus.DUPLICATE
-                                    task.filename = existing.get("filename")
-                                    task.title = f"[DUPLICATE - filesystem] {title}"
-                                    task.existing_file = existing
-                            logger.info(f"Duplicate file detected for {url}")
+                                self.tasks.pop(url, None)
+                                self.skipped_count += 1
+                            logger.info(f"Skipped duplicate file for {url}")
                             self._broadcast_refresh()
                             return
 
@@ -1426,14 +1583,10 @@ class DownloadController:
                     dup_info = dup_result["info"]
                     source = dup_info.get("source", "unknown")
                     with self.lock:
-                        task = self.tasks.get(url)
-                        if task:
-                            task.status = TaskStatus.DUPLICATE
-                            task.filename = dup_info.get("filename")
-                            task.title = f"[DUPLICATE - {source}] {title}"
-                            task.existing_file = dup_info
+                        self.tasks.pop(url, None)
+                        self.skipped_count += 1
                     logger.info(
-                        f"Duplicate detected for {url}: source={source}, vid={vid}"
+                        f"Skipped duplicate for {url}: source={source}, vid={vid}"
                     )
                     self._broadcast_refresh()
                     return
@@ -1816,12 +1969,15 @@ class DownloadController:
             "auto_delete": self.auto_delete,
             "skip_duplicates": self.skip_duplicates,
             "yt_dlp_available": bool(which_yt_dlp()),
+            "total_added": self.total_added,
+            "skipped": self.skipped_count,
         }
         self.broadcast("settings", settings)
 
     def add_urls(self, text: str, folder: Optional[str] = None):
         urls = extract_urls(text)
         added = 0
+        skipped_pre = 0
         with self.lock:
             for u in urls:
                 norm = normalize_url(u)
@@ -1829,15 +1985,19 @@ class DownloadController:
                     dest = None
                     if folder:
                         # Sanitize folder name: remove invalid characters
-                        safe_folder = re.sub(r'[<>:"/\\|?*]', '_', folder).strip()
+                        safe_folder = re.sub(r'[<>:"/\\\\|?*]', '_', folder).strip()
                         if safe_folder:
                             dest = str(Path(self.destination) / safe_folder)
                     
                     self.tasks[norm] = Task(url=norm, status=TaskStatus.INFO, dest=dest, model_name=folder)
                     added += 1
-        if added:
+                    self.total_added += 1
+                elif norm and norm in self.tasks:
+                    skipped_pre += 1
+        
+        if added or skipped_pre:
             self._broadcast_refresh()
-        return {"added": added}
+        return {"added": added, "skipped_pre": skipped_pre, "total_added": self.total_added, "skipped": self.skipped_count}
 
     def pause(self, url: str):
         with self.lock:
@@ -1871,11 +2031,16 @@ class DownloadController:
 
     def cancel_all(self):
         with self.lock:
-            for url, proc in self.processes.items():
+            for url, proc in list(self.processes.items()):
                 proc.terminate()
-            for url, task in self.tasks.items():
-                if task.status in (TaskStatus.QUEUED, TaskStatus.DOWNLOADING, TaskStatus.PAUSED, TaskStatus.FETCHING_INFO):
-                    task.status = TaskStatus.CANCELLED
+                self.processes.pop(url, None)
+            self.tasks.clear()
+        self._broadcast_refresh()
+
+    def clear_all(self):
+        with self.lock:
+            self.tasks.clear()
+            self.processes.clear()
         self._broadcast_refresh()
 
     def remove(self, url: str):
@@ -1921,6 +2086,7 @@ class DownloadController:
                     TaskStatus.FAILED,
                     TaskStatus.CANCELLED,
                     TaskStatus.DUPLICATE,
+                    TaskStatus.INCOMPLETE,
                 )
             }
         self._broadcast_refresh()
@@ -2061,6 +2227,8 @@ async def ws_handler(request):
                     controller.cancel(data.get("url"))
                 elif cmd == "cancel_all":
                     controller.cancel_all()
+                elif cmd == "clear_all":
+                    controller.clear_all()
                 elif cmd == "remove":
                     controller.remove(data.get("url"))
                 elif cmd == "retry":
@@ -2105,6 +2273,8 @@ async def ws_handler(request):
                         "auto_delete": controller.auto_delete,
                         "skip_duplicates": controller.skip_duplicates,
                         "yt_dlp_available": bool(which_yt_dlp()),
+                        "total_added": controller.total_added,
+                        "skipped": controller.skipped_count,
                     }
                     await ws.send_str(
                         json.dumps({"type": "settings", "data": settings})

@@ -1,33 +1,27 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
-const { spawn, execSync } = require('child_process');
+const { spawn } = require('child_process');
 const fs = require('fs');
 
 app.commandLine.appendSwitch('disable-gpu-cache');
 app.commandLine.appendSwitch('disable-disk-cache');
 
+// Single instance lock (match tordownloaderElectron pattern)
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 let mainWindow = null;
 let pythonProcess = null;
 const BACKEND_PORT = 8765;
-
-function killPortProcess() {
-    if (process.platform === 'win32') {
-        try {
-            const result = execSync(`netstat -ano | findstr :${BACKEND_PORT} | findstr LISTENING`, { encoding: 'utf8' });
-            const lines = result.trim().split('\n');
-            for (const line of lines) {
-                const parts = line.trim().split(/\s+/);
-                const pid = parts[parts.length - 1];
-                if (pid && !isNaN(pid)) {
-                    console.log(`Killing process ${pid} on port ${BACKEND_PORT}`);
-                    execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' });
-                }
-            }
-        } catch (e) {
-            // No process found on port
-        }
-    }
-}
 
 function getPythonPath() {
     const venvPython = path.join(__dirname, '..', 'venv', 'Scripts', 'python.exe');
@@ -93,7 +87,7 @@ function createWindow() {
         },
         title: 'VidAutoDown',
         show: false,
-        backgroundColor: '#0f172a'
+        backgroundColor: '#0a0a0a'
     });
 
     mainWindow.setMenu(null);
@@ -117,12 +111,11 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-    killPortProcess();
     startPythonBackend();
     
     setTimeout(() => {
         createWindow();
-    }, 3000);
+    }, 2000);
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
